@@ -1,0 +1,13 @@
+# 参考用（conda を使わず pip だけで導入する場合）。推奨は environment.yml（conda-forge）。
+# Windows で pip だけを使う場合、manimpango・pycairo の導入に追加の手順が要ることがあります。
+manim==0.20.1
+# Pillow 13 では manim 0.20.1 が画像を描けない
+pillow<13
+manim-slides==5.7.0
+PySide6
+fastapi==0.162.0
+uvicorn==0.54.0
+# 出力した PDF に、押すと飛ぶリンクを入れる
+pypdf
+# 配布資料（文字を選べる PDF）を作る
+reportlab

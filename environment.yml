@@ -1,0 +1,40 @@
+name: manim-slide-gui
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - python=3.13
+  # manim 0.22 系は manim-slides 5.7.0 と組み合わせて使えない。0.21.0 は conda-forge に無いため、
+  # conda-forge にある 0.20.1 に固定（VERSIONS.md を参照）
+  - manim=0.20.1
+  # Pillow 13 では manim 0.20.1 が画像（ImageMobject）を描けない（Image.fromarray の mode 引数が使えなくなったため）
+  - pillow<13
+  - pyside6
+  # 発表ウィンドウの動画再生（QtMultimedia）。conda-forge では pyside6 と別パッケージ
+  - qt6-multimedia
+  - qtpy
+  - av
+  - pydantic
+  - pydantic-extra-types
+  - rtoml
+  - python-pptx
+  # 出力した PDF に、押すと飛ぶリンクを入れる
+  - pypdf
+  # 配布資料（文字を選べる PDF）を作る
+  - reportlab
+  - click-default-group
+  - beautifulsoup4
+  - lxml
+  # manim-slides 5.7.0 が使う物（pip の部品の依存も、すべて conda から入れておく）
+  - jinja2
+  - requests
+  - rich
+  - tqdm
+  - platformdirs
+  - click
+  - fastapi-core=0.162.0
+  - uvicorn=0.54.0
+  - pip
+  - pip:
+      # conda-forge に無いため pip で導入（依存は上で conda から入れる。足りない物があれば pip が補う）
+      - manim-slides==5.7.0

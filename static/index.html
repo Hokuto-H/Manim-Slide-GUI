@@ -1,0 +1,736 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Manim Slide GUI</title>
+<link rel="icon" type="image/png" href="/static/icon.png">
+<link rel="stylesheet" href="/static/app.css?b=__APP_BUILD__">
+<script>
+  window.APP_TOKEN = "__APP_TOKEN__";
+  // MathJax 4（ローカル配信）。外部への読み込みが起きないよう、フォントの場所をローカルに向け、
+  // 読み上げ・メニューなどの補助機能（外部データを読みに行くことがある）を無効にする。
+  window.MathJax = {
+    loader: {
+      paths: { fonts: "/static/vendor/mathjax-fonts" },
+      load: [],
+    },
+    tex: { macros: {} },
+    svg: { fontCache: "none" },
+    options: {
+      enableMenu: false,
+      enableSpeech: false,
+      enableBraille: false,
+      enableEnrichment: false,
+      enableExplorer: false,
+    },
+    startup: { typeset: false },
+  };
+</script>
+<script src="/static/vendor/mathjax/tex-svg.js" defer></script>
+<script src="/static/vendor/fabric/fabric.min.js" defer></script>
+<script type="module">
+  // 更新した直後は、ブラウザに古い版の JS が残っていることがあるので、版が変わったときは読み直してから始める
+  const build = "__APP_BUILD__";
+  let last = null;
+  try { last = localStorage.getItem("manimSlideGuiBuild"); } catch { /* 使えなくても続ける */ }
+  if (last !== build) {
+    await Promise.all(__APP_FILES__.map((u) => fetch(u, { cache: "reload" }).catch(() => null)));
+    try { localStorage.setItem("manimSlideGuiBuild", build); } catch { /* 使えなくても続ける */ }
+  }
+  await import("/static/js/main.js");
+</script>
+</head>
+<body>
+<header class="toolbar">
+  <div class="brand">Manim Slide GUI</div>
+  <div class="tb-group">
+    <button data-action="new" title="新規プロジェクト">新規</button>
+    <button data-action="open" title="プロジェクトを開く">開く</button>
+    <button data-action="save" data-needs-project title="保存（Ctrl+S）">保存</button>
+    <button data-action="lint" data-needs-project id="btn-lint" title="スライドの点検: はみ出し・重なり・小さい文字・色の差・数式の誤り・描画が最新か など">点検</button>
+    <button data-action="search" data-needs-project id="btn-search" title="すべてのスライドから探す・置き換える（Ctrl+Shift+F・Ctrl+H）">検索・置換</button>
+    <button data-action="cleanup" data-needs-project id="btn-cleanup" title="使っていない画像・動画・音声のファイルを整理する">ファイルの整理</button>
+    <button data-action="pack" data-needs-project id="btn-pack" title="プロジェクトを 1 つの zip に固めて、ほかのパソコンへ持ち運ぶ">zip に固める</button>
+    <button data-action="backup" data-needs-project id="btn-backup" title="自動保存の設定と、少し前の状態（バックアップ）に戻す">バックアップ</button>
+  </div>
+  <div class="tb-group">
+    <button data-action="undo" id="btn-undo" disabled title="元に戻す（Ctrl+Z）">↶</button>
+    <button data-action="redo" id="btn-redo" disabled title="やり直す（Ctrl+Y / Ctrl+Shift+Z）">↷</button>
+  </div>
+  <div class="tb-group">
+    <button data-action="settings" data-needs-project>プロジェクト設定</button>
+    <button data-action="preamble" data-needs-project>共通プリアンブル</button>
+    <button data-action="env" id="btn-env">環境チェック <span class="badge" id="env-badge">…</span></button>
+    <button data-action="help" id="btn-help" class="tb-help" title="使い方の案内（F1 で、今の場所の説明）">？</button>
+  </div>
+  <div class="tb-spacer"></div>
+  <div class="tb-group">
+    <button data-action="export" data-needs-project title="Manim Slides の .py を書き出す">書き出し</button>
+    <select id="render-quality" title="描画の品質" data-needs-project>
+      <option value="low">低（480p）</option>
+      <option value="medium">中（720p）</option>
+      <option value="high" selected>高（1080p）</option>
+      <option value="high30" title="1080p・30 コマ/秒。3D の回転など、描画に時間がかかるときに（時間はほぼ半分）">高（1080p・30fps）</option>
+    </select>
+    <select id="render-range" title="描画するスライド（「描画しない」の印の通りか、今回だけ選ぶか）" data-needs-project style="width:auto">
+      <option value="mark" selected>描画: 印の通り</option>
+      <option value="current">描画: このスライドだけ</option>
+      <option value="picked" hidden>描画: 選んだスライド</option>
+      <option value="pick">描画: 選んで描画…</option>
+    </select>
+    <label class="tb-check" title="描画が終わったら manim-slides present を開く"><input type="checkbox" id="present-after" checked>発表を開く</label>
+    <select id="present-window" style="width:auto" title="発表ウィンドウの開き方（発表中も F キーでフルスクリーンを切り替えられます）">
+      <option value="maximized" selected>最大化で開く</option>
+      <option value="fullscreen">フルスクリーンで開く</option>
+      <option value="normal">通常の大きさで開く</option>
+    </select>
+    <select id="present-info" style="width:auto" title="発表者用の情報ウィンドウ（現在・次のスライド、フルスクリーン切り替え、全ページの一覧）">
+      <option value="auto" selected>発表者用: 画面が2つなら表示</option>
+      <option value="show">発表者用: 常に表示</option>
+      <option value="hide">発表者用: 表示しない</option>
+    </select>
+    <button data-action="preview-slide" data-needs-project id="btn-slide-preview" title="編集中のスライドだけを低画質で描画して、小窓で確認します（Ctrl+Enter）">▷ このスライドを試す</button>
+    <button data-action="render" data-needs-project class="primary" id="btn-render">▶ 描画・発表</button>
+    <button data-action="present" data-needs-project id="btn-present" title="直前の描画結果で発表ウィンドウを開く">発表のみ</button>
+    <button data-action="overview" data-needs-project id="btn-overview" title="発表全体の見通し: スライドごとの動きの時間・目安・リハーサルの時間">見通し</button>
+    <button data-action="rehearsal" data-needs-project id="btn-rehearsal" title="リハーサル（発表の練習）の記録を比べる。ページごとの時間を、発表の目安や動画の待ち時間に入れる">リハーサル</button>
+    <button data-action="record" data-needs-project id="btn-record" title="発表の録画（発表ウィンドウで Ctrl+R）。マイク・カメラの設定と、録画した動画の一覧">● 録画</button>
+    <button data-action="convert" data-needs-project id="btn-convert" title="直前の描画結果を、HTML・PDF・PowerPoint のファイルにする（manim-slides convert）">ファイルに出力…</button>
+  </div>
+</header>
+
+<main class="workspace" id="workspace">
+  <aside class="pane left" id="slides-pane">
+    <div class="pane-head">
+      <span>スライド</span>
+      <button class="icon" data-action="add-slide" data-needs-project title="スライドを追加">＋</button>
+      <button class="icon" data-action="slide-templates" data-needs-project title="スライドの型（保存した配置から追加・今のスライドを型として保存）">型</button>
+      <button class="icon" data-action="sorter" data-needs-project id="btn-sorter" title="スライド一覧: スライドを大きく並べて、まとめて並べ替え・削除・複製・章・付録・マスターを決める">▦</button>
+      <button class="small" data-action="masters" data-needs-project id="btn-masters" title="スライドマスター（全スライドに共通で出すロゴ・帯・題名の型・背景色など）を編集する">マスター</button>
+    </div>
+    <ol class="slide-list" id="slide-list"></ol>
+    <div class="master-pane" id="master-pane" hidden></div>
+    <div class="pane-head layers-head"><span>レイヤー</span><span class="hint">上が手前</span></div>
+    <ol class="layer-list" id="layer-list"></ol>
+  </aside>
+
+  <section class="pane center">
+    <div class="canvas-tools" id="canvas-tools">
+      <button data-action="add-text" data-needs-project>＋テキスト</button>
+      <button data-action="add-math" data-needs-project>＋数式</button>
+      <button id="btn-add-shape" data-needs-project title="直線・矢印・円・多角形・吹き出しなど">＋図形 ▾</button>
+      <button data-action="add-image" data-needs-project title="画像を追加（キャンバスへのドラッグ＆ドロップ、Ctrl+V の貼り付けでも追加できます）">＋画像</button>
+      <button data-action="add-media" data-needs-project title="動画・音声を追加（キャンバスへのドラッグ＆ドロップでも追加できます）。発表ウィンドウで、Manim の映像に重ねて再生します">＋動画・音声</button>
+      <button id="btn-add-part" data-needs-project title="部品（よく使う要素の組を保存したもの）を置く・選んだ要素を部品にする">＋部品 ▾</button>
+      <button id="btn-guides" data-needs-project title="スマートガイド・グリッド・ガイド線">表示 ▾</button>
+      <span class="hint" id="canvas-hint">ドラッグで移動、角のハンドルで拡大・縮小、上の丸いハンドルで回転（Shift で 15° 刻み）。画像はドロップや貼り付けでも追加。テキストは Manim と同じ形で表示、数式は MathJax による仮表示です。</span>
+    </div>
+    <div class="guide-menu" id="guide-menu" hidden></div>
+    <div class="preset-menu" id="preset-menu" hidden></div>
+    <div class="gd-edit" id="gd-edit" hidden>
+      <b id="gd-edit-title">ガイド線の位置</b>
+      <div class="row"><select id="gd-edit-axis"><option value="x">縦の線 x =</option><option value="y">横の線 y =</option></select>
+        <input id="gd-edit-val" type="number" step="0.05" style="width:7em"><span class="unit">（Manim の座標。中央が 0）</span></div>
+      <div class="row"><button type="button" class="small danger" id="gd-edit-del">消す</button><span class="grow"></span>
+        <button type="button" class="small" id="gd-edit-cancel">やめる</button><button type="button" class="small primary" id="gd-edit-ok">決める</button></div>
+    </div>
+    <div class="sorter" id="sorter" hidden>
+      <div class="so-bar">
+        <b>スライド一覧</b><span class="hint" id="so-count"></span>
+        <span class="grow"></span>
+        <button type="button" class="small" data-op="dup" title="選んだスライドを複製（Ctrl+D）">複製</button>
+        <button type="button" class="small danger" data-op="del" title="選んだスライドを削除（Delete）">削除</button>
+        <button type="button" class="small" data-op="top">先頭へ</button><button type="button" class="small" data-op="end">末尾へ</button>
+        <button type="button" class="small" data-op="sec" title="選んだスライドを 1 つの章にする（先頭のスライドから章を始める）">章にする…</button>
+        <button type="button" class="small" data-op="apx" title="付録にする・付録から外す">付録</button>
+        <button type="button" class="small" data-op="skip" title="描画しない・描画する">描画しない</button>
+        <button type="button" class="small" data-op="all" title="すべて選ぶ（Ctrl+A）">すべて選ぶ</button>
+        <label class="unit">大きさ <input type="range" id="so-size" min="140" max="420" step="20" style="width:90px"></label>
+        <button type="button" class="small primary" id="so-close" title="編集に戻る（Esc）">編集に戻る</button>
+      </div>
+      <p class="hint so-help">クリックで選び、Ctrl+クリックで足す・外す、Shift+クリックで範囲。ドラッグで、選んだスライドをまとめて動かします。ダブルクリック（Enter）でそのスライドを開きます。右クリックで、マスターなどほかの操作も。</p>
+      <div class="so-grid" id="so-grid"></div>
+    </div>
+    <div class="stage" id="stage">
+      <div class="stage-inner" id="stage-inner">
+        <canvas id="slide-canvas"></canvas>
+      </div>
+      <div class="welcome" id="welcome">
+        <h1>Manim Slide GUI</h1>
+        <p>LaTeX の数式を保ったまま、クリックで進むアニメーション付きスライドを作ります。</p>
+        <div class="welcome-actions">
+          <button class="primary" data-action="new">新規プロジェクト</button>
+          <button data-action="open">プロジェクトを開く</button>
+          <button data-action="unpack">zip から取り込む</button>
+          <button data-action="tutorial" title="練習用のプロジェクトで、操作しながら一通りの流れを体験します（10 分ほど）">チュートリアル</button>
+        </div>
+        <ul class="recent" id="recent-list"></ul>
+      </div>
+    </div>
+    <div class="step-order" id="step-order">
+      <div class="step-order-head">
+        <span>このスライドのアニメーション（クリック順）</span><button type="button" class="help-q" data-help="animation" data-help-anchor="" title="動きの付け方の説明" aria-label="動きの付け方の説明">？</button>
+        <span class="hint" title="各ステップの前に next_slide() が入ります">ステップ＝クリック 1 回分。ドラッグで順序を入れ替え</span>
+        <span class="grow"></span>
+        <span class="seg-toggle" id="step-view"><button type="button" class="small on" data-view="list">一覧</button><button type="button" class="small" data-view="timeline" title="動きを時間の帯で見る・ドラッグで始まりと長さを変える">タイムライン</button></span>
+        <button type="button" class="small" id="add-step" title="新しいステップ（クリック）を足す">＋ステップ</button>
+        <button type="button" class="small" id="btn-presets" title="よく使う動き（組み込み・自分で保存したもの）を、選んだ要素に当てる">動きのプリセット ▾</button>
+        <button type="button" class="small" id="anim-fold" title="動きの編集欄を隠す・出す">編集欄を隠す</button>
+      </div>
+      <ol id="step-chips"></ol>
+      <div id="anim-editor" class="anim-editor"></div>
+      <div id="timeline" class="timeline" hidden></div>
+    </div>
+  </section>
+
+  <aside class="pane right" id="props-pane">
+    <div class="pane-head"><span id="props-title">プロパティ</span><button type="button" class="help-q" data-help="__ctx" title="選んでいる物の説明（F1）" aria-label="選んでいる物の説明">？</button></div>
+    <div class="props" id="props"></div>
+  </aside>
+</main>
+
+<section class="bottom-panel" id="bottom-panel" hidden>
+  <div class="bp-head">
+    <div class="bp-tabs">
+      <button class="tab active" data-tab="error">エラー</button>
+      <button class="tab" data-tab="log">描画ログ</button>
+    </div>
+    <button class="icon" data-action="close-bottom" title="閉じる">✕</button>
+  </div>
+  <div class="bp-body" data-tab-body="error" id="error-body" tabindex="-1"></div>
+  <div class="bp-body" data-tab-body="log" tabindex="-1" hidden><pre id="render-log"></pre></div>
+</section>
+
+<footer class="statusbar">
+  <span id="status-project">プロジェクト未選択</span>
+  <span id="status-dirty"></span>
+  <span class="tb-spacer"></span>
+  <progress id="status-progress" max="1" value="0" hidden></progress>
+  <span id="status-render"></span>
+  <button class="link" data-action="show-bottom" id="status-log-btn" hidden>ログ</button>
+</footer>
+
+<div class="toasts" id="toasts"></div>
+
+<!-- スライドの型 -->
+<dialog id="dlg-slide-tpl" class="dlg">
+  <form method="dialog">
+    <h2>スライドの型</h2>
+    <p class="field-note">よく使う配置（題名と本文の位置など）を保存しておき、新しいスライドとして足せます。使っている画像・動画などのファイルも一緒に保存し、
+      足すときにプロジェクトのフォルダへ写します。保存先はこのパソコンのアプリの設定フォルダで、どのプロジェクトからも使えます。</p>
+    <div class="row" style="margin: 8px 0">
+      <button type="button" class="primary" id="st-save">今のスライドを型として保存…</button>
+      <label class="row"><input type="checkbox" id="st-steps" checked> アニメーション（ステップ）も含める</label>
+    </div>
+    <ul class="tpl-list" id="st-list"></ul>
+    <div class="dlg-actions"><button value="cancel">閉じる</button></div>
+  </form>
+</dialog>
+
+<!-- 今回だけ描画するスライドを選ぶ -->
+<dialog id="dlg-range" class="dlg">
+  <form method="dialog">
+    <h2>今回描画するスライド</h2>
+    <p class="field-note">チェックしたスライドだけを描画します（今回だけ。プロジェクトには保存しません）。ページ番号は、描画するスライドだけで詰めて付けます。
+      いつも描画しないスライドは、スライドの一覧の「描画しない」で印を付けます。</p>
+    <div class="row" style="margin:6px 0">
+      <button type="button" class="small" data-a="all">すべて</button>
+      <button type="button" class="small" data-a="none">すべて外す</button>
+      <button type="button" class="small" data-a="mark">印の通りに戻す</button>
+      <span class="grow"></span><span class="hint" id="rg-count"></span>
+    </div>
+    <ul class="range-list" id="rg-list"></ul>
+    <div class="dlg-actions">
+      <button value="cancel">やめる</button>
+      <button type="button" class="primary" id="rg-ok">決める</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- HTML・PDF・PowerPoint への出力（manim-slides convert）-->
+<dialog id="dlg-convert" class="dlg">
+  <form method="dialog">
+    <h2>ファイルに出力</h2>
+    <p class="field-note">直前に描画した結果（「▶ 描画・発表」で作った動画）を、発表用のファイルにします。出力先はプロジェクトの <code>export</code> フォルダです。</p>
+    <div class="cv-presets">
+      <span>保存した設定</span>
+      <select id="cv-pr" style="flex:1;min-width:10em"></select>
+      <button type="button" class="small" id="cv-pr-load">読み込む</button>
+      <button type="button" class="small danger" id="cv-pr-del" title="選んだ保存した設定を消す">消す</button>
+      <button type="button" class="small" id="cv-pr-save" title="今の形式と設定に名前を付けて保存する（どのプロジェクトでも使えます）">この設定を保存…</button>
+      <button type="button" class="small primary" id="cv-batch-open" title="形式や保存した設定をいくつか選んで、順に出力する">まとめて出力…</button>
+    </div>
+    <div class="cv-batch" id="cv-batch" hidden>
+      <b>まとめて出力</b><span class="hint">チェックした形式・設定を、上から順に出力します。形式は、下の画面の今の設定で出力します。</span>
+      <label class="cv-ball"><input type="checkbox" id="cv-batch-all"> <b>すべて選ぶ</b></label>
+      <ul id="cv-batch-list"></ul>
+      <div class="row"><button type="button" class="small primary" id="cv-batch-go">選んだ設定で出力</button><button type="button" class="small" id="cv-batch-close">閉じる</button></div>
+    </div>
+    <div class="fmt">
+      <label><input type="radio" name="cv-fmt" value="html" checked> <b>HTML</b>（ブラウザで発表。動き・くり返し・自動で次へ・発表者ノート（S キー）が使えます）</label>
+      <label style="margin-left:22px"><input type="checkbox" id="cv-onefile"> 1 つのファイルにまとめる（動画を中に入れる。ファイルが大きくなります）</label>
+      <label><input type="radio" name="cv-fmt" value="pdf"> <b>PDF</b>（動きは入りません。印刷・配布用）</label>
+      <label style="margin-left:22px"><input type="radio" name="cv-pdf" value="steps" checked> ステップごと（クリックの区切りごとの最後の画面を 1 ページずつ）</label>
+      <label style="margin-left:22px"><input type="radio" name="cv-pdf" value="pages"> スライドごと（各スライドの最後のステップの画面だけを 1 ページに。ページ番号とページがそろいます）</label>
+      <label><input type="radio" name="cv-fmt" value="pptx"> <b>PowerPoint</b>（区切りごとの動画を 1 枚ずつ。発表者ノートも入ります）</label>
+      <label><input type="radio" name="cv-fmt" value="mp4"> <b>動画（mp4）</b>（クリックせずに最後まで流した 1 本の動画。動画サイトや配布用）</label>
+      <label style="margin-left:22px;display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="white-space:nowrap">クリックの区切りで <input type="number" id="cv-wait" min="0" max="600" step="0.5" value="2" style="width:5em"> 秒待つ</span>
+        <span class="field-note">（ステップ・スライドの初めの表示ごとに変えた所は、その秒数）</span></label>
+      <label style="margin-left:22px"><input type="checkbox" id="cv-srt"> 発表者ノートを字幕ファイル（.srt）にする</label>
+      <label style="margin-left:44px;display:flex;align-items:center;gap:6px"><span style="white-space:nowrap">字幕の中身</span>
+        <select id="cv-srtmode" style="width:auto">
+          <option value="all">スライドのノートとステップのノート</option>
+          <option value="step">ステップのノートだけ</option>
+        </select></label>
+      <label><input type="radio" name="cv-fmt" value="handout"> <b>配布資料（PDF）</b>（スライドとノート・メモ欄を用紙に並べる。文字を選べる・探せる）</label>
+      <label style="margin-left:22px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">並べ方
+        <select id="cv-ho-layout" style="width:auto">
+          <option value="notes1">1 枚＋ノート</option><option value="notes2">2 枚＋ノート</option><option value="notes3">3 枚＋ノート</option>
+          <option value="memo2">2 枚＋メモ欄</option><option value="memo3">3 枚＋メモ欄</option>
+          <option value="grid4">4 枚</option><option value="grid6">6 枚</option><option value="grid9">9 枚</option></select>
+        用紙 <select id="cv-ho-paper" style="width:auto"><option>A4</option><option>A3</option><option value="B5">B5（JIS）</option><option>Letter</option></select>
+        向き <select id="cv-ho-orient" style="width:auto"><option value="auto">おまかせ（4 枚は横・ほかは縦）</option><option value="portrait">縦</option><option value="landscape">横</option></select>
+        <select id="cv-ho-unit" style="width:auto"><option value="slide">スライドごと</option><option value="step">ステップごと</option></select></label>
+      <label><input type="radio" name="cv-fmt" value="png"> <b>画像（PNG）</b>（ページ・ステップごとの画面。資料や SNS に貼る用）</label>
+      <label style="margin-left:22px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+        <select id="cv-png-unit" style="width:auto"><option value="slide">スライドごと（最後の画面）</option><option value="step">ステップごと</option></select></label>
+      <label><input type="radio" name="cv-fmt" value="gif"> <b>動く画像（GIF）</b>（スライドごとに、動きをつないだ GIF）</label>
+      <label style="margin-left:22px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">幅
+        <select id="cv-gif-width" style="width:auto"><option value="480">480</option><option value="720" selected>720</option><option value="960">960</option><option value="1280">1280</option></select>
+        コマの数 <select id="cv-gif-fps" style="width:auto"><option value="10">10 / 秒</option><option value="15" selected>15 / 秒</option><option value="20">20 / 秒</option><option value="30">30 / 秒</option></select></label>
+      <label style="margin-left:22px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">PNG・GIF のページ
+        <input type="text" id="cv-img-pages" placeholder="空ならすべて（例: 1-3, 5, A1）" style="width:16em"></label>
+    </div>
+    <ul class="notes-list" id="cv-notes"></ul>
+    <div class="cv-status" id="cv-status"></div>
+    <details id="cv-logbox" hidden><summary>ログ</summary><pre class="cv-log" id="cv-log"></pre></details>
+    <div class="dlg-actions">
+      <button type="button" id="cv-open">フォルダを開く</button>
+      <span class="grow"></span>
+      <button value="cancel">閉じる</button>
+      <button type="button" id="cv-cancel" hidden>やめる</button>
+      <button type="button" class="primary" id="cv-go">出力する</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- 検索・置換（画面の右上に出す。開いたまま編集できる）-->
+<div id="search-panel" class="search-panel" hidden>
+  <div class="sr-head"><b>検索・置換</b><span class="grow"></span><button type="button" class="small" id="sr-close" title="閉じる（Esc）">×</button></div>
+  <div class="sr-row"><input type="text" id="sr-find" placeholder="探す文字（Enter で最初の場所へ）"></div>
+  <div class="sr-row" id="sr-replace-row"><input type="text" id="sr-replace" placeholder="置き換える文字（空なら消す）"></div>
+  <div class="sr-row sr-opts">
+    <label><input type="checkbox" id="sr-case"> 大文字・小文字を区別</label>
+    <label title="$1 などで、かっこで囲んだ所を置き換えに使えます"><input type="checkbox" id="sr-regex"> 正規表現</label>
+    <select id="sr-scope"><option value="all">すべてのスライド</option><option value="slide">今のスライド</option></select>
+  </div>
+  <div class="sr-row sr-opts">
+    <label><input type="checkbox" id="sr-c-text" checked> 文字</label>
+    <label><input type="checkbox" id="sr-c-math" checked> 数式</label>
+    <label><input type="checkbox" id="sr-c-notes" checked> ノート</label>
+    <label><input type="checkbox" id="sr-c-code" checked> コード</label>
+  </div>
+  <div class="sr-row"><span class="field-note" id="sr-count"></span><span class="grow"></span><button type="button" class="small primary" id="sr-all" disabled>すべて置換</button></div>
+  <ul class="sr-list" id="sr-list"></ul>
+  <p class="field-note sr-foot">文字＝テキスト・表・グラフや図形のラベル。要素の名前（変数名）・ファイル・色などの設定は探しません。置換は「元に戻す」（Ctrl+Z）で 1 回で戻せます。</p>
+</div>
+
+<!-- スライドの点検（画面の右上。開いたまま直せる）-->
+<div id="lint-panel" class="search-panel" hidden>
+  <div class="sr-head"><b>スライドの点検</b><span class="grow"></span><button type="button" class="small" id="lint-fold" title="畳む・広げる（項目を押して要素へ飛ぶと、自動で畳みます）">畳む</button><button type="button" class="small" id="lint-close" title="閉じる">×</button></div>
+  <div class="sr-row"><span class="seg-toggle" id="lint-tabs"><button type="button" class="small on" data-tab="lint">点検</button><button type="button" class="small" data-tab="yure" title="全角・半角、句読点、同じ語の書き方のゆれ">表記ゆれ</button></span>
+    <span class="field-note" id="lint-count"></span><span class="grow"></span><button type="button" class="small" id="lint-again">もう一度調べる</button></div>
+  <ul class="sr-list" id="lint-list"></ul>
+  <ul class="sr-list" id="yure-list" hidden></ul>
+  <div class="sr-row"><label><input type="checkbox" id="lint-auto" checked> 発表の前に自動で点検する（「描画・発表」で発表するとき・「発表のみ」）</label></div>
+  <p class="field-note sr-foot">押すと、そのスライド・要素へ移ります。わざとそうしている所は「無視する」を押すと、次からは出しません（プロジェクトに覚えます）。
+    文字の大きさ・色の差は、後ろの席から見やすいかの目安です。</p>
+</div>
+
+<!-- 発表の前の点検 -->
+<dialog id="dlg-lintgate" class="dlg">
+  <form method="dialog">
+    <h2>発表の前の点検</h2>
+    <p id="lg-summary"></p>
+    <ul class="lg-list" id="lg-list"></ul>
+    <label class="row"><input type="checkbox" id="lg-off"> 次から、発表の前に点検しない</label>
+    <div class="dlg-actions">
+      <button type="button" id="lg-list-btn">発表をやめて、点検の一覧を見る</button>
+      <span class="grow"></span>
+      <button type="button" class="primary" id="lg-go">このまま続ける</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- 使っていないファイルの整理 -->
+<dialog id="dlg-cleanup" class="dlg dlg-wide">
+  <form method="dialog">
+    <h2>使っていないファイルの整理</h2>
+    <p class="field-note">プロジェクトの <code>images</code>・<code>clips</code> フォルダのうち、どのスライドでも使っていないファイルを、<code>unused</code> フォルダへ移します。
+      移したファイルは「戻す」で元に戻せ、要らなければ「完全に削除」で消せます。ステップのコードなどにファイルの名前が書いてあるものは、使っているものとして扱います。</p>
+    <p class="field-note" id="cl-summary"></p>
+    <h3 class="rc-h"><label><input type="checkbox" id="cl-all-unused" checked> 使っていないファイル</label></h3>
+    <ul class="cl-list" id="cl-unused"></ul>
+    <div id="cl-kept-box" hidden>
+      <h3 class="rc-h">バックアップや「元に戻す」の履歴だけが使っているファイル</h3>
+      <p class="field-note">今のスライドでは使っていません。移すと、そのバックアップに戻したときや元に戻したときに、ファイルが見つからなくなります（初めは選んでいません）。</p>
+      <ul class="cl-list" id="cl-kept"></ul>
+    </div>
+    <div class="dlg-actions" style="justify-content:flex-start"><button type="button" class="primary" id="cl-move" disabled>unused フォルダへ移す</button></div>
+    <div id="cl-trash-box" hidden>
+      <h3 class="rc-h"><label><input type="checkbox" id="cl-all-trash"> unused フォルダの中</label> <span class="field-note" id="cl-trash-total"></span></h3>
+      <ul class="cl-list" id="cl-trash"></ul>
+      <div class="dlg-actions" style="justify-content:flex-start">
+        <button type="button" id="cl-restore" disabled>選んだものを元の場所に戻す</button>
+        <button type="button" class="danger" id="cl-purge" disabled>選んだものを完全に削除</button>
+      </div>
+    </div>
+    <div class="dlg-actions">
+      <button type="button" id="cl-folder">unused フォルダを開く</button>
+      <span class="grow"></span>
+      <button value="cancel">閉じる</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- 自動保存とバックアップ -->
+<dialog id="dlg-backup" class="dlg dlg-wide">
+  <form method="dialog">
+    <h2>自動保存とバックアップ</h2>
+    <fieldset class="rc-set">
+      <legend>設定（このパソコンのすべてのプロジェクトに使います）</legend>
+      <div class="rc-row"><label><input type="checkbox" id="bk-auto"> 自動保存</label>
+        <span>変更が止まって</span><select id="bk-delay"><option value="2">2 秒</option><option value="3">3 秒</option><option value="5">5 秒</option><option value="10">10 秒</option><option value="30">30 秒</option></select><span>たったら保存する（変え続けていても 30 秒ごとに保存）</span></div>
+      <div class="rc-row"><label><input type="checkbox" id="bk-on"> バックアップ</label>
+        <span>保存したとき、前のバックアップから</span><select id="bk-every"><option value="5">5 分</option><option value="10">10 分</option><option value="15">15 分</option><option value="30">30 分</option><option value="60">1 時間</option></select><span>過ぎていれば作る</span></div>
+      <p class="field-note">バックアップは、プロジェクトの <code>backups</code> フォルダに、スライドの内容とプリアンブルを保存します（画像・動画のファイルは含みません）。
+        プロジェクトを開いたときと、バックアップから戻す直前にも作ります。自動で作ったものは、新しい 20 個と、それより古いものは 1 日 1 個を 30 日分残します。
+        「今の状態を控える」で作ったものは、自動では消しません。</p>
+    </fieldset>
+    <div class="rc-row"><input type="text" id="bk-label" placeholder="メモ（例: 先生に見せる前）" maxlength="100" style="flex:1">
+      <button type="button" id="bk-make">今の状態を控える</button></div>
+    <h3 class="rc-h">バックアップ <span class="field-note" id="bk-total"></span></h3>
+    <ul class="rc-list" id="bk-list"></ul>
+    <div class="dlg-actions">
+      <button type="button" id="bk-folder">フォルダを開く</button>
+      <span class="grow"></span>
+      <button value="cancel">閉じる</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- リハーサルの記録 -->
+<dialog id="dlg-bkcmp" class="dlg dlg-wide">
+  <form method="dialog">
+    <h2>バックアップと今を比べる</h2>
+    <p class="field-note" id="bc-summary"></p>
+    <label class="row"><input type="checkbox" id="bc-same"> 変わっていないスライドも出す</label>
+    <ol class="bc-list" id="bc-list"></ol>
+    <div class="dlg-actions"><button value="cancel" formnovalidate>閉じる</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlg-overview" class="dlg dlg-wide">
+  <form method="dialog">
+    <h2>発表全体の見通し</h2>
+    <p class="field-note">スライドごとに、<span class="ov-key ov-anim"></span>動きの時間（描画される長さ。コードのステップは数えません）・
+      <span class="ov-key ov-target"></span>目安の時間・<span class="ov-key ov-real"></span>リハーサルでかかった時間を並べます。行を押すと、そのスライドへ移ります。</p>
+    <div class="rc-row"><span>リハーサル</span><select id="ov-rh"></select><label class="row"><input type="checkbox" id="ov-appx"> 付録も出す</label></div>
+    <div id="ov-table" class="ov-wrap"></div>
+    <div class="dlg-actions"><button value="cancel" formnovalidate>閉じる</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlg-rehearsal" class="dlg dlg-wide">
+  <form method="dialog">
+    <h2>リハーサルの記録</h2>
+    <p class="field-note">発表ウィンドウの情報ウィンドウで「● リハーサルを始める」を押して発表を通すと、ページごとにかかった時間を記録します
+      （「■ リハーサルを終えて保存」か、発表ウィンドウを閉じると保存）。保存先はプロジェクトの <code>rehearsals</code> フォルダです。</p>
+    <div class="rc-row"><span>記録</span><select id="rh-a"></select><span>と比べる</span><select id="rh-b"></select></div>
+    <div id="rh-table" class="rh-wrap"></div>
+    <div class="rc-row" style="margin-top:8px">
+      <button type="button" id="rh-apply-target">この記録の時間を「発表の目安」にする</button>
+      <span>丸め</span><select id="rh-round"><option value="1">1 秒</option><option value="5" selected>5 秒</option><option value="10">10 秒</option><option value="30">30 秒</option></select>
+      <button type="button" id="rh-apply-wait" title="区切りに居た時間から、動きの時間を引いたもの（クリックを待った時間）を、ステップ・スライドの「動画での待ち」に入れます">この記録で「動画での待ち」を決める</button>
+    </div>
+    <div class="dlg-actions">
+      <button type="button" class="danger" id="rh-delete">この記録を削除</button>
+      <span class="grow"></span>
+      <button value="cancel">閉じる</button>
+      <button type="button" class="primary" id="rh-present">発表を開く</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- 発表の録画 -->
+<dialog id="dlg-record" class="dlg dlg-wide">
+  <form method="dialog">
+    <h2>発表の録画</h2>
+    <p class="field-note">発表ウィンドウで <b>Ctrl+R</b> を押すと録画を始めます（もう一度で一時停止・再開、<b>Ctrl+Shift+R</b> か、発表ウィンドウを閉じると終わり）。
+      発表者用の情報ウィンドウにも同じボタンがあります。終わると、ここで自動で 1 本の動画（mp4）にします。保存先はプロジェクトの <code>recordings</code> フォルダです。</p>
+    <fieldset class="rc-set">
+      <legend>録るもの（次に発表ウィンドウを開いたときから）</legend>
+      <div class="rc-row"><label><input type="checkbox" id="rc-mic"> マイク（自分の声）</label>
+        <select id="rc-mic-dev"></select></div>
+      <div class="rc-row"><label><input type="checkbox" id="rc-cam"> カメラ（隅に小さく入れる）</label>
+        <select id="rc-cam-dev"></select></div>
+      <div class="rc-row"><button type="button" class="small" id="rc-refresh">マイク・カメラを調べ直す</button><span class="field-note" id="rc-dev-note"></span></div>
+    </fieldset>
+    <fieldset class="rc-set">
+      <legend>動画にするときの設定（「動画にし直す」で、録ったあとでも変えられます）</legend>
+      <div class="rc-row"><label>カメラの位置</label>
+        <select id="rc-corner"><option value="br">右下</option><option value="bl">左下</option><option value="tr">右上</option><option value="tl">左上</option></select>
+        <label>大きさ</label>
+        <select id="rc-size"><option value="0.18">小</option><option value="0.25">中</option><option value="0.33">大</option></select>
+        <label><input type="checkbox" id="rc-round"> 角を丸める</label></div>
+      <div class="rc-row"><label><input type="checkbox" id="rc-slide"> スライドの音（効果音・BGM・発表で再生する動画や音声）</label>
+        <label>音量</label><input type="range" id="rc-slidevol" min="0" max="2" step="0.05"><span id="rc-slidevol-v" class="rc-vol"></span></div>
+      <div class="rc-row"><label>マイクの音量</label><input type="range" id="rc-micvol" min="0" max="3" step="0.05"><span id="rc-micvol-v" class="rc-vol"></span></div>
+    </fieldset>
+    <h3 class="rc-h">録画した動画</h3>
+    <ul class="rc-list" id="rc-list"></ul>
+    <div class="dlg-actions">
+      <button type="button" id="rc-folder">フォルダを開く</button>
+      <span class="grow"></span>
+      <button value="cancel">閉じる</button>
+      <button type="button" class="primary" id="rc-present">発表を開く</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- 新規プロジェクト / プロジェクト設定（F19・F20）-->
+<dialog id="dlg-project" class="dlg">
+  <form method="dialog" id="form-project">
+    <h2><span id="dlg-project-title">新規プロジェクト</span></h2>
+    <div class="form-grid">
+      <label for="pj-tpl">テンプレート</label>
+      <div>
+        <div class="row"><select id="pj-tpl"><option value="">（使わない）</option></select>
+          <button type="button" class="small" id="pj-tpl-save" title="下の設定（と共通プリアンブル）を、テンプレートとして保存する">今の設定を保存…</button>
+          <button type="button" class="small danger" id="pj-tpl-del" title="選んでいるテンプレートを削除する" disabled>削除</button></div>
+        <div class="field-note" id="pj-tpl-note">選ぶと、背景色・フォント・文字サイズ・文字色・ページ番号など（と共通プリアンブル）を、下の欄に入れます。</div>
+      </div>
+      <label for="pj-name">プロジェクト名</label>
+      <div>
+        <input id="pj-name" required autocomplete="off" placeholder="例: 微分の発表">
+        <div class="field-note" id="pj-name-note"></div>
+      </div>
+      <label for="pj-parent" class="only-new">保存先</label>
+      <div class="only-new row">
+        <input id="pj-parent" autocomplete="off">
+        <button type="button" id="pj-browse">参照…</button>
+      </div>
+      <label for="pj-bg">背景色</label>
+      <div class="row"><input type="color" id="pj-bg"><input id="pj-bg-hex" class="hex" maxlength="7"></div>
+      <label for="pj-font">既定のフォント</label>
+      <div>
+        <select id="pj-font"></select>
+        <div class="field-note" id="pj-font-note"></div>
+      </div>
+      <label for="pj-texfont">LaTeX の文字の書体</label>
+      <div>
+        <select id="pj-texfont"><option value="serif">明朝（LaTeX の既定）</option><option value="sans">ゴシック（本文と書体をそろえる）</option></select>
+        <div class="field-note">題名・LaTeX の文章・箇条書き・定理のブロック・表・図形のラベルなど、LaTeX で組む文字（日本語と英数字）の書体です。数式の文字（x など）は変わりません。テキストの要素は「既定のフォント」です。</div>
+      </div>
+      <label class="only-settings">プロジェクトのフォント</label>
+      <div class="only-settings" id="pj-pfonts"></div>
+      <label for="pj-size">既定の文字サイズ</label>
+      <div class="row"><input type="number" id="pj-size" min="4" max="400" step="1"><span class="unit">（Manim の font_size）</span></div>
+      <label for="pj-color">既定の文字色</label>
+      <div>
+        <div class="row"><input type="color" id="pj-color"><input id="pj-color-hex" class="hex" maxlength="7">
+          <button type="button" id="pj-color-suggest" class="small">背景に合わせる</button></div>
+        <div class="field-note" id="pj-color-note"></div>
+      </div>
+      <label for="pj-scale" class="only-settings">文字サイズの換算係数</label>
+      <div class="only-settings row"><input type="number" id="pj-scale" min="0.1" max="10" step="0.05"><span class="unit">GUI の値 × 係数 = Manim の font_size</span></div>
+      <label class="only-settings">3D</label>
+      <div class="only-settings">
+        <label class="row"><input type="checkbox" id="pj-use3d"> 3D を使う（ThreeDSlide で書き出す）</label>
+        <div class="field-note">オンにすると、立体・3D 座標軸・曲面などを置けます。カメラは向き（φ・θ）と拡大率で動かす方式になり、
+          <code>self.camera.frame</code> は使えなくなります（スライドのパネルで、スライドごとの初めのカメラの向きを決めます）。</div>
+        <div class="row">キャンバスでの 3D の重なり <select id="pj-depth3d" style="width:auto"><option value="scene">描画と同じ（まとめて描く）</option><option value="depth">奥行き（物の中心の距離）の順</option><option value="layer">レイヤーの順</option></select></div>
+        <div class="field-note">描画では、すべての物の小さな面が、カメラに近い順に重なります（食い込んだ物・曲面どうしも正しく）。「描画と同じ」は、キャンバスでもスライドの 3D の物をまとめて 1 枚に描きます（3D の物を変えるたびに、描き直しに数秒かかります）。
+          「奥行きの順」「レイヤーの順」は、物ごとの絵を重ねるだけなので速いですが、食い込んだ物などは描画と違うことがあります。</div>
+      </div>
+      <label>ページ番号</label>
+      <div>
+        <label class="row"><input type="checkbox" id="pj-pn"> ページ番号を付ける</label>
+        <div class="row"><span class="unit">位置</span><select id="pj-pn-pos">
+            <option value="br">右下</option><option value="bc">下の中央</option><option value="bl">左下</option>
+            <option value="tr">右上</option><option value="tc">上の中央</option><option value="tl">左上</option></select>
+          <span class="unit">書き方</span><select id="pj-pn-fmt"><option value="n">3</option><option value="n/N">3 / 10（全体のページ数も）</option></select></div>
+        <div class="row"><span class="unit">大きさ</span><input type="number" id="pj-pn-size" min="4" max="200" step="1" style="width:5em">
+          <span class="unit">色</span><input type="color" id="pj-pn-color"><label class="row"><input type="checkbox" id="pj-pn-same"> 既定の文字色</label></div>
+        <div class="field-note">ここでオン・オフしたあとも、スライドのパネル（要素を選んでいないとき）で、スライドごとに「付ける・付けない」と番号を変えられます。
+          番号はスライドの順に 1, 2, 3, …（スライドで番号を指定すると、次のスライドからはその続き）。文字は既定のフォントで書きます。</div>
+      </div>
+      <label>章の表示</label>
+      <div>
+        <div class="row"><span class="unit">スライドに</span><select id="pj-sec-disp">
+            <option value="none">出さない</option><option value="name">章の名前</option><option value="bar">進み具合のバー</option><option value="both">章の名前とバー</option></select></div>
+        <div class="row"><span class="unit">名前の位置</span><select id="pj-sec-pos">
+            <option value="tl">左上</option><option value="tc">上の中央</option><option value="tr">右上</option>
+            <option value="bl">左下</option><option value="bc">下の中央</option><option value="br">右下</option></select>
+          <span class="unit">バーの位置</span><select id="pj-sec-bar"><option value="top">上の端</option><option value="bottom">下の端</option></select></div>
+        <div class="row"><span class="unit">大きさ</span><input type="number" id="pj-sec-size" min="4" max="200" step="1" style="width:5em">
+          <span class="unit">文字の色</span><input type="color" id="pj-sec-color"><label class="row"><input type="checkbox" id="pj-sec-same"> 既定の文字色</label>
+          <span class="unit">バーの色</span><input type="color" id="pj-sec-barcolor"></div>
+        <div class="field-note">章は、スライドのパネルの「章・付録・時間」で「このスライドから新しい章」にして作ります。バーは本編の中の進み具合で、章ごとに区切ります
+          （付録には出しません）。スライドごとに「章の表示を隠す」こともできます。</div>
+      </div>
+      <label class="only-settings">新しいスライド</label>
+      <div class="only-settings">
+        <label class="row"><input type="checkbox" id="pj-autotitle"> 「＋スライド」で、マスターの題名の型の題名を置いておく</label>
+        <div class="field-note">マスターに題名があるとき、新しいスライドに題名を置きます（文字を書くまでは薄く表示され、描画されません）。</div>
+      </div>
+      <label class="only-settings">定理・番号</label>
+      <div class="only-settings">
+        <div class="row"><span class="unit">番号の付け方</span><select id="pj-refnum"><option value="chapter">章ごと（定理 3.1、(3.1)、図 3.1）</option><option value="global">通し（定理 1、(1)、図 1）</option></select></div>
+        <div class="thm-styles" id="pj-thm"></div>
+        <div class="row"><span class="unit">証明の見出し</span><input id="pj-prooftitle" maxlength="40" style="width:14em" placeholder="{対象} の{証明}"></div>
+        <div class="field-note">何の証明かを選んだ証明の見出しの形。{対象} が「定理 1.2」など、{証明} が上の「証明」の名前になります（例: 英語なら「{証明} of {対象}」）。</div>
+        <div class="field-note">定理・定義などのブロックの、種類ごとの名前（見出しの文字）と色。定理・定義・補題・系・命題・例・注意は、同じ番号の列で数えます（式・図は別の列）。</div>
+      </div>
+      <label class="only-new">共通プリアンブル</label>
+      <div class="only-new">
+        <label class="radio"><input type="radio" name="pj-pre" value="empty"> 空から始める</label>
+        <label class="radio"><input type="radio" name="pj-pre" value="template" id="pj-pre-template"> 定番テンプレートから始める</label>
+        <label class="radio" hidden id="pj-pre-theme-row"><input type="radio" name="pj-pre" value="theme" id="pj-pre-theme"> 選んだテンプレートのプリアンブル</label>
+        <pre class="preview" id="pj-pre-preview"></pre>
+      </div>
+    </div>
+    <p class="field-note only-settings">既定のフォント・文字サイズ・文字色の変更は、これから置く要素にだけ適用されます（置いてある要素は変わりません）。背景色はすぐに反映されます。</p>
+    <div class="form-error" id="pj-error"></div>
+    <div class="dlg-actions">
+      <button type="button" class="danger only-settings" id="pj-delete" title="このプロジェクトのフォルダを、ごみ箱へ移す">このプロジェクトを削除…</button>
+      <span class="grow"></span>
+      <button value="cancel" formnovalidate>キャンセル</button>
+      <button value="ok" class="primary" id="pj-ok">作成</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- プロジェクトを開く -->
+<dialog id="dlg-open" class="dlg">
+  <form method="dialog" id="form-open">
+    <h2>プロジェクトを開く</h2>
+    <p class="field-note">project.json があるフォルダを指定します。</p>
+    <div class="row"><input id="op-folder" autocomplete="off" placeholder="例: E:\Slides\微分の発表"><button type="button" id="op-browse">参照…</button></div>
+    <ul class="recent" id="op-recent"></ul>
+    <div class="form-error" id="op-error"></div>
+    <div class="dlg-actions">
+      <button type="button" id="op-unpack" title="「zip に固める」で作った zip を取り出して開く">zip から取り込む…</button>
+      <span class="grow"></span>
+      <button value="cancel" formnovalidate>キャンセル</button>
+      <button value="ok" class="primary">開く</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- 持ち運び: zip に固める -->
+<dialog id="dlg-pack" class="dlg">
+  <form method="dialog" id="form-pack">
+    <h2>zip に固める（持ち運び）</h2>
+    <p class="field-note">プロジェクトを 1 つの zip ファイルにまとめます。ほかのパソコンでは「開く」→「zip から取り込む」で開けます。
+      使っているフォントと LaTeX のパッケージ、アプリと Manim の版も記録され、取り込むときにその環境と見比べます。</p>
+    <ul class="pk-list" id="pk-groups"></ul>
+    <p class="field-note" id="pk-total"></p>
+    <label class="field">保存先
+      <div class="row"><input id="pk-dest" autocomplete="off"><button type="button" id="pk-browse">参照…</button></div>
+    </label>
+    <p class="field-note">入れないもの: <code>unused</code> フォルダ（ファイルの整理で移したもの）と、作り直せる一時ファイル。</p>
+    <div class="form-error" id="pk-error"></div>
+    <div class="pk-done" id="pk-done" hidden></div>
+    <div class="dlg-actions">
+      <button type="button" id="pk-reveal" hidden>保存したフォルダを開く</button>
+      <span class="grow"></span>
+      <button value="cancel" formnovalidate>閉じる</button>
+      <button type="button" class="primary" id="pk-run">zip を作る</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- 持ち運び: zip から取り込む -->
+<dialog id="dlg-unpack" class="dlg">
+  <form method="dialog" id="form-unpack">
+    <h2>zip から取り込む</h2>
+    <div id="up-step1">
+      <label class="field">zip ファイル
+        <div class="row"><input id="up-zip" autocomplete="off" placeholder="例: D:\持ち運び\微分の発表.zip"><button type="button" id="up-browse-zip">参照…</button></div>
+      </label>
+      <label class="field">取り出し先（この中に新しいフォルダを作ります）
+        <div class="row"><input id="up-parent" autocomplete="off"><button type="button" id="up-browse-parent">参照…</button></div>
+      </label>
+      <p class="field-note" id="up-info"></p>
+    </div>
+    <div id="up-step2" hidden>
+      <p class="ok" id="up-opened"></p>
+      <div id="up-compare"></div>
+    </div>
+    <div class="form-error" id="up-error"></div>
+    <div class="dlg-actions">
+      <button type="button" id="up-env" hidden>環境チェックを開く</button>
+      <span class="grow"></span>
+      <button value="cancel" formnovalidate id="up-close">キャンセル</button>
+      <button type="button" class="primary" id="up-run">取り出して開く</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- プロジェクトの削除 -->
+<dialog id="dlg-delproj" class="dlg">
+  <form method="dialog">
+    <h2>プロジェクトを削除</h2>
+    <p class="note-ng"><b>「<span id="dp-name"></span>」のフォルダを、中のファイルごとごみ箱へ移します。</b></p>
+    <p class="field-note"><code id="dp-folder"></code><br><span id="dp-size"></span></p>
+    <p class="field-note">スライド・取り込んだ画像や動画・描画の結果・バックアップ・録画・出力したファイルなど、フォルダの中のものがすべて移ります。
+      ごみ箱から元に戻せますが、ごみ箱を空にすると戻せません。「最近のプロジェクト」の一覧からも外します。</p>
+    <p class="note-ng" id="dp-current" hidden>今開いているプロジェクトです。削除すると閉じて、初めの画面に戻ります（保存していない変更も失われます）。</p>
+    <label class="row"><input type="checkbox" id="dp-ok"> 削除してよいことを確かめました</label>
+    <div class="form-error" id="dp-error"></div>
+    <div class="dlg-actions">
+      <button value="cancel" formnovalidate>キャンセル</button>
+      <button type="button" class="danger" id="dp-run" disabled>ごみ箱へ移す</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- 共通プリアンブル（F4）-->
+<dialog id="dlg-preamble" class="dlg wide">
+  <form method="dialog" id="form-preamble">
+    <h2>共通プリアンブル <code>preamble.tex</code></h2>
+    <p class="field-note">\usepackage や \newcommand を通常の LaTeX と同じ書き方で書きます。日本語用の zxjatype・zxjafont はアプリが自動で先頭に加えるので、書く必要はありません。</p>
+    <div id="pre-editor"></div>
+    <div id="pre-result" class="pre-result"></div>
+    <div class="dlg-actions spread">
+      <div>
+        <button type="button" id="pre-reload" title="外部エディタで編集した内容を取り込む">再読み込み</button>
+        <button type="button" id="pre-save-template" title="この内容を、新規プロジェクトで使う定番テンプレートとして保存">定番テンプレートとして保存</button>
+      </div>
+      <div>
+        <button value="cancel" formnovalidate>閉じる</button>
+        <button type="button" class="primary" id="pre-save">保存してテスト</button>
+      </div>
+    </div>
+  </form>
+</dialog>
+
+<!-- 環境チェック（F16）-->
+<dialog id="dlg-env" class="dlg wide">
+  <form method="dialog">
+    <h2>環境チェック</h2>
+    <div id="env-summary" class="env-summary"></div>
+    <table class="env-table"><thead><tr><th></th><th>項目</th><th>版</th><th>内容</th></tr></thead><tbody id="env-rows"></tbody></table>
+    <div class="dlg-actions spread">
+      <span class="field-note" id="env-meta"></span>
+      <div>
+        <button type="button" id="env-recheck">再チェック</button>
+        <button value="close" class="primary">閉じる</button>
+      </div>
+    </div>
+  </form>
+</dialog>
+</body>
+</html>

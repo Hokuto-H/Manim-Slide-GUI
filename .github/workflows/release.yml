@@ -1,0 +1,67 @@
+# インストーラーを作って GitHub の Releases に置く。
+# - 「v1.0.0」のようなタグを push すると、その版のリリースを作り、exe と SHA-256 を添付する
+#   （タグは app/__init__.py の __version__ と同じにする）
+# - Actions の画面から手で動かすと、exe を作って Artifacts に置くだけ（リリースは作らない）
+# 公開レポジトリなら、GitHub の無料アカウントで使える。
+
+name: インストーラーを作る
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: NSIS を入れる
+        run: sudo apt-get update && sudo apt-get install -y nsis
+
+      - name: 版を確かめる
+        id: ver
+        run: |
+          VERSION=$(python3 -c "from app import __version__; print(__version__)")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ] && [ "${GITHUB_REF_NAME}" != "v$VERSION" ]; then
+            echo "タグ ${GITHUB_REF_NAME} と app/__init__.py の版 v$VERSION が違います" >&2
+            exit 1
+          fi
+
+      - name: インストーラーを作る
+        run: |
+          python3 installer/build_installer.py
+          cd dist
+          sha256sum "ManimSlideGUI-Setup-${{ steps.ver.outputs.version }}.exe" > "ManimSlideGUI-Setup-${{ steps.ver.outputs.version }}.exe.sha256"
+          cat ./*.sha256
+
+      - name: Artifacts に置く
+        uses: actions/upload-artifact@v4
+        with:
+          name: ManimSlideGUI-Setup-${{ steps.ver.outputs.version }}
+          path: dist/*
+
+      - name: リリースを作る
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V="${{ steps.ver.outputs.version }}"
+          HASH=$(cut -d' ' -f1 "dist/ManimSlideGUI-Setup-$V.exe.sha256")
+          cat > notes.md <<NOTES
+          ## Manim Slide GUI $V
+
+          **ManimSlideGUI-Setup-$V.exe** をダウンロードして実行してください（Windows 10 1809 以降・11、64 ビット。管理者の権限は要りません）。
+
+          - 署名の無いインストーラーなので、「Windows によって PC が保護されました」と出ます。「詳細情報」→「実行」で進めてください。
+          - 入れるときに、インターネットから部品（約 450 MB）・フォント・TeX Live（無ければ、入れるかを聞きます）を取得します。
+          - すでに入れている場合は、そのまま実行すると更新されます（プロジェクトと設定は残ります）。
+
+          SHA-256: \`$HASH\`
+          NOTES
+          gh release create "${GITHUB_REF_NAME}" dist/* --title "Manim Slide GUI $V" --notes-file notes.md
