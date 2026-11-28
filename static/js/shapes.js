@@ -488,7 +488,7 @@ async function addTextLike(base, shape, x, y, spec = {}) {
       theorem: "仮定: $f$ は閉区間 $[a,b]$ で連続で、$f(a)<0<f(b)$\n結論: $f(c)=0$ となる $c\\in(a,b)$ が存在する",
       definition: "関数 $f$ が点 $a$ で連続であるとは、$\\lim_{x\\to a} f(x) = f(a)$ が成り立つことをいう。",
       proof: "1 行が 1 段落です。段落ごとに出す動きを作れます。\n最後の段落の右下に、証明の終わりの印が付きます。",
-    }[kind] ?? "ここに内容を書きます。数式は $x^2$ のように $ で囲みます。";
+    }[kind] ?? "ここに内容を書きます。数式は $x^2$ のように \\$ で囲みます（\\$ と書くと、ドル記号そのものになります）。";
     Object.assign(el, { kind, title: "", body, width: 900, numbered: kind !== "proof", proofOf: "", qed: kind === "proof", boxed: null,
       fontSize: 32, color: s.defaultColor });
   } else if (shape === "bullets") {

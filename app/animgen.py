@@ -131,6 +131,16 @@ CATALOG += [
                 {"key": "about", "label": "中心", "type": "select", "default": "center", "options": [["center", "要素の中心"], ["point", "決めた点"]]},
                 {"key": "ax", "label": "点の x", "type": "number", "default": 0.0, "step": 0.1, "show": {"about": ["point"]}},
                 {"key": "ay", "label": "点の y", "type": "number", "default": 0.0, "step": 0.1, "show": {"about": ["point"]}}]},
+    {"id": "FlipH", "group": "move", "label": "左右反転", "rt": 1.0,
+     "desc": "左右を裏返す（鏡に映したように。.animate.flip(UP)）。途中で幅が細くなり、裏返った形になる。もう一度使うと元に戻る。"
+             "「決めた線」にすると、縦の線 x = 値 を境に裏返す（x = 0 なら、y 軸について対称な位置へ）。",
+     "params": [{"key": "about", "label": "境の線", "type": "select", "default": "center", "options": [["center", "要素の中心を通る縦の線"], ["line", "決めた縦の線（x = 値）"]]},
+                {"key": "pos", "label": "x =", "type": "number", "default": 0.0, "step": 0.1, "show": {"about": ["line"]}}]},
+    {"id": "FlipV", "group": "move", "label": "上下反転", "rt": 1.0,
+     "desc": "上下を裏返す（.animate.flip(RIGHT)）。途中で高さが低くなり、裏返った形になる。もう一度使うと元に戻る。"
+             "「決めた線」にすると、横の線 y = 値 を境に裏返す（y = 0 なら、x 軸について対称な位置へ）。",
+     "params": [{"key": "about", "label": "境の線", "type": "select", "default": "center", "options": [["center", "要素の中心を通る横の線"], ["line", "決めた横の線（y = 値）"]]},
+                {"key": "pos", "label": "y =", "type": "number", "default": 0.0, "step": 0.1, "show": {"about": ["line"]}}]},
     {"id": "Color", "group": "move", "label": "色を変える", "rt": 1.0, "desc": "色を変える（.animate.set_color）。線と塗りの両方。",
      "params": [{"key": "color", "label": "色", "type": "color", "default": "#FC6255"}]},
     {"id": "Opacity", "group": "move", "label": "濃さを変える", "rt": 1.0,
@@ -553,6 +563,13 @@ def anim_expr(row: dict[str, Any], t: str, ref=None, overlay: bool = False, whol
         about = f", about_point={_xy(p.get('ax', 0), p.get('ay', 0))}" if p.get("about") == "point" else ""
         head = (f"gui_rotate({t}, {_f(p.get('angle', 90))} * DEGREES{about}" if overlay
                 else f"Rotate({t}, angle={_f(p.get('angle', 90))} * DEGREES{about}")
+    elif a in ("FlipH", "FlipV"):
+        h = a == "FlipH"
+        pos = _f(p.get("pos", 0))
+        about = ("" if p.get("about") != "line"
+                 else f", about_point=[{pos}, 0, 0]" if h else f", about_point=[0, {pos}, 0]")
+        head = (f"gui_flip({t}, {0 if h else 1}{about}" if overlay
+                else f"{t}.animate.flip({'UP' if h else 'RIGHT'}{about})")
     elif a == "Color":
         head = f'gui_color({t}, "{p.get("color", "#FC6255")}"' if overlay else f'{t}.animate.set_color("{p.get("color", "#FC6255")}")'
     elif a == "Opacity":
@@ -875,7 +892,7 @@ def block_times(block: list[dict[str, Any]]) -> list[tuple[dict[str, Any], float
 # 動きの種類: 別の物を描く強調（対象には触れない）・対象に重ねる動き（強調・動かす）・それ以外（出す・消す・値・
 # カメラを戻す。対象の形を決める「土台」）
 SEPARATE_FX = {"Circumscribe", "Flash", "FocusOn", "ShowPassingFlash", "Broadcast", "CreateThenFade"}
-OVERLAY_FX = {"Indicate", "Wiggle", "ApplyWave", "Blink", "Move", "Scale", "Rotate", "Color", "Opacity", "MoveAlongPath",
+OVERLAY_FX = {"Indicate", "Wiggle", "ApplyWave", "Blink", "Move", "Scale", "Rotate", "FlipH", "FlipV", "Color", "Opacity", "MoveAlongPath",
               "CamMove", "CamZoom", "ZoomMove", "ZoomScale"}
 
 

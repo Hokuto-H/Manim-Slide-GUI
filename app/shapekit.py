@@ -2928,6 +2928,17 @@ def gui_rotate(m, angle, about_point=None, **kwargs):
     return _gui_overlay(m, apply, **kwargs)
 
 
+def gui_flip(m, dim, about_point=None, **kwargs):
+    """裏返す（dim=0 で左右、1 で上下。.animate.flip と同じ動き: 幅（高さ）が 1 → 0 → −1 と変わる）。
+    about_point が無ければ要素の中心を境にする。"""
+    def apply(x, a):
+        f = 1 - 2 * a
+        if abs(f) < 1e-4:  # 幅 0 は形が潰れて戻せないので、ごく細くする
+            f = 1e-4 if f >= 0 else -1e-4
+        x.stretch(f, int(dim), about_point=_gui_point(about_point) if about_point is not None else x.get_center())
+    return _gui_overlay(m, apply, **kwargs)
+
+
 def gui_color(m, color, **kwargs):
     """色を変える（.animate.set_color と同じく線と塗りの色。濃さは変えない）。"""
     import numpy as _np

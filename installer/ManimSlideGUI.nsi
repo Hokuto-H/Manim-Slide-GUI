@@ -203,7 +203,7 @@ Section "-本体" SecMain
       nsExec::ExecToLog `"$PY" "$INSTDIR\app\installer\post_install.py" install-tex --install "$INSTDIR"`
       Pop $0
       ${If} $0 != 0
-        MessageBox MB_ICONEXCLAMATION "TeX Live を入れられませんでした（$0）。アプリは入れますが、数式の描画にはTeX Live が要ります。$\r$\nもう一度このインストーラーを実行すると、また入れられます。"
+        MessageBox MB_ICONEXCLAMATION "TeX Live を入れられませんでした（$0）。アプリは入れますが、数式の描画には TeX Live が要ります。$\r$\nもう一度このインストーラーを実行すると、また入れられます。"
       ${EndIf}
       Goto tex_done
     tex_skip:

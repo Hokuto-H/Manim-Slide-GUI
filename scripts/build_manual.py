@@ -142,7 +142,8 @@ def build_pdf(html_file: Path, pdf_file: Path) -> None:
         font = _font_without_radicals(work)
         if font:
             pg.add_style_tag(content=f'@font-face {{ font-family: "ManualJP"; src: url("{font.as_uri()}"); }}'
-                                     'body { font-family: "ManualJP", "Noto Sans JP", sans-serif; }')
+                                     'body { font-family: "ManualJP", "Noto Sans JP", sans-serif; }'
+                                     'code, kbd { font-family: "Cascadia Mono", Consolas, "DejaVu Sans Mono", "ManualJP", monospace; }')
         pg.wait_for_timeout(500)
         pg.pdf(path=str(pdf_file), format="A4", print_background=True, prefer_css_page_size=True,
                display_header_footer=True, header_template="<span></span>",

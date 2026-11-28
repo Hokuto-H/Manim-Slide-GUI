@@ -722,3 +722,8 @@
   manim-slides の依存（jinja2・requests・rich・tqdm・platformdirs・click）を conda で入れていなかったうえ、pip を `--no-deps` で動かしていたため。
   environment.yml にこれらを足し、pip は依存を補う形（`--no-deps` なし）にして、最後に `pip check` の結果を詳細の欄に出す。
   作業環境で、environment.conda.yml から新しく作った環境＋pip の手順で、アプリの環境チェックの Manim・Manim Slides・Qt・PyAV・Pillow が ✓ になることを確かめた（win-64 の解決も確認）。
+- （2026-11-28 追記）左右反転・上下反転は Manim の `.animate.flip(UP)`・`.animate.flip(RIGHT)` で書く（境の線は `about_point`）。
+  ほかの動きと同じ時刻に重ねるときは、幅（高さ）を 1 → 0 → −1 と変える `gui_flip`（`stretch`）にする。どちらも見た目は同じ。
+- （2026-11-28 追記）説明書の PDF で、コードの書体（DejaVu Sans Mono）に無い日本語が別のフォントで描かれ、部首の文字になっていた。
+  コードの書体の次に、部首の対応を外したフォントを置いた（PDF の中の部首 0 個を確かめた）。
+

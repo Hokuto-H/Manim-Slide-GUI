@@ -22,16 +22,14 @@ export function mergeRuns(runs) {
 
 export const plainOf = (runs) => runs.map((r) => r.t).join("");
 
-function hexToRgba(hex, o) {
-  const n = parseInt(hex.slice(1), 16);
-  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${o})`;
-}
 
 function runStyle(r, defaultColor, defaultOpacity) {
   const css = [];
-  const color = r.c || defaultColor;
+  // 編集欄の文字は、要素の文字色（白など）に関係なく、いつも読みやすい色で出す。
+  // 一部に付けた色は、文字の下の太い線で示す（不透明度は、薄すぎて見えなくならないよう下限を付けて反映）
   const o = r.o ?? defaultOpacity ?? 1;
-  css.push(`color:${hexToRgba(color, Math.max(0.15, o))}`); // 編集欄では、薄すぎて見えなくならないよう下限を付ける
+  css.push(`color:rgba(29,33,40,${Math.max(0.35, o)})`);
+  if (r.c && r.c.toLowerCase() !== String(defaultColor || "").toLowerCase()) css.push(`box-shadow:inset 0 -4px 0 ${r.c}`);
   if (r.b) css.push("font-weight:700");
   if (r.i) css.push("font-style:italic");
   const deco = [r.u ? "underline" : "", r.s ? "line-through" : ""].filter(Boolean).join(" ");
